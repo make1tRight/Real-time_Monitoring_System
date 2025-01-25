@@ -133,7 +133,6 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp" />
-    <ClCompile Include="MediaUtil.cpp" />
     <ClCompile Include="media_codec.cpp" />
     <ClCompile Include="media_decoder.cpp" />
     <ClCompile Include="media_encoder.cpp" />

@@ -11,10 +11,6 @@ void PrintError(int error)
 	std::cerr << buf << std::endl;
 }
 
-//long long NowMs()
-//{
-//	return clock() / (CLOCKS_PER_SEC / 1000);
-//}
 long long GetCurrentMsTime()
 {
 	auto beg = std::chrono::steady_clock::now();
