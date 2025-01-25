@@ -93,7 +93,6 @@ int main(int argc, char* argv[])
     //media_decoder.InitHardWare();
     //media_decoder.OpenContext();
 
-
     //1. 找解码器
     auto codec = avcodec_find_decoder(codec_id);
     //2. 创建解码器上下文
