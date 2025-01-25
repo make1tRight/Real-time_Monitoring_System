@@ -87,19 +87,19 @@ int main(int argc, char* argv[])
     unsigned char inbuf[4096] = { 0 };
     AVCodecID codec_id = AV_CODEC_ID_H264;
 
-    //MediaDecoder media_decoder;
-    //auto c = media_decoder.CreateContext(codec_id, MediaCodec::DECODER);
-    //media_decoder.SetContext(c);
-    //media_decoder.InitHardWare();
-    //media_decoder.OpenContext();
+    MediaDecoder media_decoder;
+    auto c = media_decoder.CreateContext(codec_id, MediaCodec::DECODER);
+    media_decoder.SetContext(c);
+    media_decoder.InitHardWare();
+    media_decoder.OpenContext();
 
-    //1. 找解码器
-    auto codec = avcodec_find_decoder(codec_id);
-    //2. 创建解码器上下文
-    auto c = avcodec_alloc_context3(codec);
-    //c->thread_count = 16;
-    //3. 打开上下文
-    avcodec_open2(c, NULL, NULL);
+    ////1. 找解码器
+    //auto codec = avcodec_find_decoder(codec_id);
+    ////2. 创建解码器上下文
+    //auto c = avcodec_alloc_context3(codec);
+    ////c->thread_count = 16;
+    ////3. 打开上下文
+    //avcodec_open2(c, NULL, NULL);
     //分割上下文
     auto parser = av_parser_init(codec_id);
     auto pkt = av_packet_alloc();
@@ -115,6 +115,11 @@ int main(int argc, char* argv[])
         if (data_size <= 0) {
             break;
         }
+        //循环播放
+        if (ifs.eof()) {
+            ifs.clear();
+            ifs.seekg(0, std::ios::beg);
+        }
         auto data = inbuf;
         while (data_size > 0) {	//一次有多帧数据则循环调用 
             //通过0001 截断, 输出到AVPacket
@@ -129,33 +134,29 @@ int main(int argc, char* argv[])
             if (pkt->size) {
                 //std::cout << pkt->size << " " << std::endl;
                 //发送packet到解码线程
-                ret = avcodec_send_packet(c, pkt);
-                if (ret < 0) {
+                //ret = avcodec_send_packet(c, pkt);
+                if (media_decoder.SendPacket(pkt) == false) {
                     break;
                 }
                 //获取多帧解码数据
-                while (ret >= 0) {
-                    //每次都会调用av_frame_unref, 空间会重新释放和申请
-                    ret = avcodec_receive_frame(c, frame);
-                    if (ret < 0) {
-                        break;
-                    }
-                    auto pframe = frame;
-                    if (c->hw_device_ctx) { //硬解码
-                        //硬解码转换GPU->CPU(显存->内存)
-                        //AV_PIX_FMT_NV12 = 23,      < planar YUV 4:2:0, 12bpp, 1 plane for Y and 1 plane for the UV components,
-                        //which are interleaved (first byte U and the following byte V)
-                        av_hwframe_transfer_data(hw_frame, frame, 0);
-                        pframe = hw_frame;
-                    }
-                    std::cout << frame->format << std::endl;
+                while (media_decoder.RecvFrame(frame)) {
+                    ////每次都会调用av_frame_unref, 空间会重新释放和申请
+                    //auto pframe = frame;
+                    //if (c->hw_device_ctx) { //硬解码
+                    //    //硬解码转换GPU->CPU(显存->内存)
+                    //    //AV_PIX_FMT_NV12 = 23,      < planar YUV 4:2:0, 12bpp, 1 plane for Y and 1 plane for the UV components,
+                    //    //which are interleaved (first byte U and the following byte V)
+                    //    av_hwframe_transfer_data(hw_frame, frame, 0);
+                    //    pframe = hw_frame;
+                    //}
+                    //std::cout << frame->format << std::endl;
                     //std::cout << frame->format << std::endl;
                     /* 第一帧初始化窗口 */
                     if (!is_init_win) {
-                        view->Init(frame->width, frame->height, (AVPixelFormat)pframe->format);
+                        view->Init(frame->width, frame->height, (AVPixelFormat)frame->format);
                         is_init_win = true;
                     }
-                    view->PresentFrame(frame);
+                     view->PresentFrame(frame);
                     ++count;
                     auto cur = GetCurrentMsTime();
                     if (cur - begin >= 100) {	//100ms计算1次
@@ -167,15 +168,10 @@ int main(int argc, char* argv[])
             }
         }
     }
-    //取出缓存中的数据
-    int ret = avcodec_send_packet(c, NULL);
-    while (ret >= 0) {
-        //每次都会调用av_frame_unref, 空间会重新释放和申请
-        ret = avcodec_receive_frame(c, frame);
-        if (ret < 0) {
-            break;
-        }
-        std::cout << "receive from cache:" << frame->format << std::endl;
+    auto frames = media_decoder.GetCachePkt();
+    for (auto& frame : frames) {
+        view->PresentFrame(frame);
+        av_frame_free(&frame);
     }
     av_parser_close(parser);
     avcodec_free_context(&c);

@@ -83,14 +83,18 @@ bool SdlRender::Present(const char* data, int linesize)
 	}
 	std::lock_guard<std::mutex> lock(_mtx);
 	if (!_texture || !_renderer || !_win || _width <= 0 || _height <= 0) {
+		std::cerr << SDL_GetError() << std::endl;
 		return false;
 	}
 	if (linesize <= 0) {
-		if (_format == SDL_PIXELFORMAT_RGBA8888 ||
-			_format == SDL_PIXELFORMAT_ARGB8888) {
-			linesize = _width * 4;
-		}
-		if (_format == SDL_PIXELFORMAT_IYUV) {
+		//if (_format == SDL_PIXELFORMAT_RGBA8888 ||
+		//	_format == SDL_PIXELFORMAT_ARGB8888) {
+		//	linesize = _width * 4;
+		//}
+		//if (_format == SDL_PIXELFORMAT_IYUV) {
+		//	linesize = _width;
+		//}
+		if (_av_format == AV_PIX_FMT_YUV420P) {
 			linesize = _width;
 		}
 	}
@@ -100,22 +104,28 @@ bool SdlRender::Present(const char* data, int linesize)
 	}
 	//5. 复制内存数据到显存中
 	auto ret = SDL_UpdateTexture(_texture, NULL, data, linesize);
-	if (ret < 0) {
+	if (ret != 0) {
 		std::cerr << SDL_GetError() << std::endl;
 		return false;
 	}
 	// 6.清空屏幕
 	SDL_RenderClear(_renderer);
 	//7. 复制材质到渲染器
-	SDL_Rect sdl_rect;
-	sdl_rect.x = 0;
-	sdl_rect.y = 0;
 	if (_render_width > 0 || _render_height > 0) {
+		SDL_Rect sdl_rect;
+		sdl_rect.x = 0;
+		sdl_rect.y = 0;
 		sdl_rect.w = _render_width;
 		sdl_rect.h = _render_height;
+		ret = SDL_RenderCopy(_renderer, _texture, NULL, &sdl_rect);
 	}
-	//7. 复制材质到渲染器
-	SDL_RenderCopy(_renderer, _texture, NULL, &sdl_rect);
+	else {
+		ret = SDL_RenderCopy(_renderer, _texture, NULL, NULL);
+	}
+	if (ret != 0) {
+		std::cerr << SDL_GetError() << std::endl;
+		return false;
+	}
 	//8. 渲染
 	SDL_RenderPresent(_renderer);
 	return true;

@@ -11,7 +11,8 @@ struct AVFrame;
 class MediaRender
 {
 public:
-	MediaRender();
+	//MediaRender();
+	~MediaRender();
 
 	enum RenderType {
 		SDL = 0
@@ -99,5 +100,7 @@ protected:
 	std::chrono::steady_clock::time_point _beg_time_ms;
 	int _count = 0;					//统计显示次数
 	void* _win_id = nullptr;		//窗口句柄
+private:
+	unsigned char* _cache = nullptr;//复制NV12缓冲
 };
 

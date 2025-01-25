@@ -54,6 +54,29 @@ bool MediaDecoder::RecvFrame(AVFrame* frame)
 	return true;
 }
 
+std::vector<AVFrame*> MediaDecoder::GetCachePkt()
+{
+	std::vector<AVFrame*> res;
+	std::lock_guard<std::mutex> lock(_mtx);
+	if (_context == nullptr) {
+		return res;
+	}
+	//取出缓存中的数据
+	int ret = avcodec_send_packet(_context, NULL);
+	while (ret >= 0) {
+		auto frame = av_frame_alloc();
+		//每次都会调用av_frame_unref, 空间会重新释放和申请
+		ret = avcodec_receive_frame(_context, frame);
+		if (ret < 0) {
+			//防止内存泄漏
+			av_frame_free(&frame);
+			break;
+		}
+		res.push_back(frame);
+	}
+	return res;
+}
+
 bool MediaDecoder::InitHardWare(int type)
 {
 	std::lock_guard<std::mutex> lock(_mtx);

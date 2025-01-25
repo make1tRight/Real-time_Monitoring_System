@@ -4,8 +4,12 @@ extern "C" {
 #include <libavcodec/avcodec.h>
 }
 
-MediaRender::MediaRender()
+MediaRender::~MediaRender()
 {
+	if (_cache) {
+		delete _cache;
+	}
+	_cache = nullptr;
 }
 
 MediaRender* MediaRender::CreateContext(RenderType type)
@@ -27,13 +31,37 @@ bool MediaRender::PresentFrame(AVFrame* frame)
 		return false;
 	}
 	UpdateRenderFps();
-
 	if (frame->format == AV_PIX_FMT_YUV420P) {
 		return Present(
 			frame->data[0], frame->linesize[0],	//Y
 			frame->data[1], frame->linesize[1],	//U
 			frame->data[2], frame->linesize[2]	//V
 		);
+	}
+	if (frame->format == AV_PIX_FMT_NV12) {
+		if (!_cache) {
+			_cache = new unsigned char[4096 * 2160 * 1.5];
+		}
+		int linesize = frame->width;
+		if (frame->linesize[0] == frame->width) {
+			memcpy(_cache, frame->data[0], frame->linesize[0] * frame->height); //Y 1ÐÐx¸ß¶È
+			memcpy(_cache + frame->linesize[0] * frame->height,
+				frame->data[1], (frame->linesize[1] * frame->height) / 2); //UV
+		}
+		if (frame->linesize[0] != frame->width) {
+			for (int i = 0; i < frame->height; ++i) {
+				memcpy(_cache + i * frame->width,
+					frame->data[0] + i * frame->linesize[0],
+					frame->width);
+			}
+			for (int i = 0; i < frame->height / 2; ++i) {
+				auto p = _cache + frame->height * frame->width;
+				memcpy(p + i * frame->width,
+					frame->data[1] + i * frame->linesize[1],
+					frame->width);
+			}
+		}
+		return Present((char*)_cache, linesize);
 	}
 	if (frame->format == AV_PIX_FMT_BGRA ||
 		frame->format == AV_PIX_FMT_ARGB ||
