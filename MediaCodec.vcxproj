@@ -135,6 +135,7 @@
     <ClCompile Include="main.cpp" />
     <ClCompile Include="MediaUtil.cpp" />
     <ClCompile Include="media_codec.cpp" />
+    <ClCompile Include="media_decoder.cpp" />
     <ClCompile Include="media_encoder.cpp" />
     <ClCompile Include="media_render.cpp" />
     <ClCompile Include="media_util.cpp" />
@@ -142,6 +143,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="media_codec.h" />
+    <ClInclude Include="media_decoder.h" />
     <ClInclude Include="media_encoder.h" />
     <ClInclude Include="media_render.h" />
     <ClInclude Include="media_util.h" />

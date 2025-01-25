@@ -4,6 +4,7 @@
 #include "media_codec.h"
 #include "media_encoder.h"
 #include "media_util.h"
+#include "media_decoder.h"
 
 
 int main(int argc, char* argv[])
@@ -86,6 +87,13 @@ int main(int argc, char* argv[])
     unsigned char inbuf[4096] = { 0 };
     AVCodecID codec_id = AV_CODEC_ID_H264;
 
+    //MediaDecoder media_decoder;
+    //auto c = media_decoder.CreateContext(codec_id, MediaCodec::DECODER);
+    //media_decoder.SetContext(c);
+    //media_decoder.InitHardWare();
+    //media_decoder.OpenContext();
+
+
     //1. 找解码器
     auto codec = avcodec_find_decoder(codec_id);
     //2. 创建解码器上下文
@@ -97,6 +105,7 @@ int main(int argc, char* argv[])
     auto parser = av_parser_init(codec_id);
     auto pkt = av_packet_alloc();
     auto frame = av_frame_alloc();
+    auto hw_frame = av_frame_alloc();//用于硬解码的转换
     auto begin = GetCurrentMsTime();
     int count = 0;//解码统计
     bool is_init_win = false;
@@ -132,10 +141,19 @@ int main(int argc, char* argv[])
                     if (ret < 0) {
                         break;
                     }
+                    auto pframe = frame;
+                    if (c->hw_device_ctx) { //硬解码
+                        //硬解码转换GPU->CPU(显存->内存)
+                        //AV_PIX_FMT_NV12 = 23,      < planar YUV 4:2:0, 12bpp, 1 plane for Y and 1 plane for the UV components,
+                        //which are interleaved (first byte U and the following byte V)
+                        av_hwframe_transfer_data(hw_frame, frame, 0);
+                        pframe = hw_frame;
+                    }
+                    std::cout << frame->format << std::endl;
                     //std::cout << frame->format << std::endl;
                     /* 第一帧初始化窗口 */
                     if (!is_init_win) {
-                        view->Init(frame->width, frame->height, (AVPixelFormat)frame->format);
+                        view->Init(frame->width, frame->height, (AVPixelFormat)pframe->format);
                         is_init_win = true;
                     }
                     view->PresentFrame(frame);

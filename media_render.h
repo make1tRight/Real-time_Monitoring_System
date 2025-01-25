@@ -32,8 +32,8 @@ public:
 	/// <param name="fmt">绘制的像素格式</param>
 	/// <param name="win_id">窗口句柄, 如果为空则创建新窗口</param>
 	/// <returns>是否创建成功</returns>
-	virtual bool Init(int width, int height,
-		SDL_PixelFormatEnum format = SDL_PIXELFORMAT_RGBA8888, void* win_id = nullptr) = 0;
+	/*virtual bool Init(int width, int height,
+		SDL_PixelFormatEnum format = SDL_PIXELFORMAT_RGBA8888, void* win_id = nullptr) = 0;*/
 	virtual bool Init(int width, int height,
 		AVPixelFormat format = AV_PIX_FMT_YUV420P) = 0;
 

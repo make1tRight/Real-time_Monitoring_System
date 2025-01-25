@@ -2,6 +2,7 @@
 extern "C" {
 #include <libavcodec/avcodec.h>
 #include <libavutil/opt.h>
+#include <libavutil/avutil.h>
 }
 #pragma comment(lib, "avcodec.lib")
 #pragma comment(lib, "avutil.lib")

@@ -6,8 +6,6 @@ class SdlRender : public MediaRender
 {
 public:
 	virtual bool Init(int width, int height,
-		SDL_PixelFormatEnum format = SDL_PIXELFORMAT_RGBA8888, void* win_id = nullptr) override;
-	virtual bool Init(int width, int height,
 		AVPixelFormat format = AV_PIX_FMT_YUV420P) override;
 	virtual bool Present(const char* data, int linesize = 0) override;
 	virtual bool Present(
