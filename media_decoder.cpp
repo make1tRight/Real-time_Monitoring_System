@@ -35,7 +35,7 @@ bool MediaDecoder::RecvFrame(AVFrame* frame)
 	}
 	auto ret = avcodec_receive_frame(_context, f);
 	if (ret != 0) {
-		PrintError(ret);
+		//PrintError(ret);
 		if (_context->hw_device_ctx) {
 			av_frame_free(&f);
 		}

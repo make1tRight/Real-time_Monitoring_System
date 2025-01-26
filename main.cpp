@@ -9,86 +9,93 @@
 
 int main(int argc, char* argv[])
 {
-    auto view = MediaRender::CreateContext();
-    //1. 分割h264, 存入AVPacket
-    // ffmpeg -i test.mp4 -s 400x300 test.h264
-    std::string filename = "test.h264";
-    std::ifstream ifs(filename, std::ios::binary);
-    if (!ifs) {
+    //打开媒体文件
+    const char* url = "test2.mp4";
+    //解封装输入上下文
+    AVFormatContext* ic = nullptr;
+    auto ret = avformat_open_input(&ic, url,
+        NULL,		//封装器格式, NULL表示根据后缀名自动检测
+        NULL		//rtsp需要设置
+    );
+    if (ret != 0) {
+        PrintError(ret);
         return -1;
     }
-    unsigned char inbuf[4096] = { 0 };
-    AVCodecID codec_id = AV_CODEC_ID_H264;
+    //获取媒体信息(无头部格式)
+    ret = avformat_find_stream_info(ic, NULL);
+    if (ret < 0) {
+        PrintError(ret);
+        return -1;
+    }
+    av_dump_format(ic, 0, url,
+        0//is_output=0表示输入
+    );
+    AVStream* as = nullptr;//音频流
+    AVStream* vs = nullptr;//视频流
+    for (int i = 0; i < ic->nb_streams; ++i) {
+        //如果是音频
+        if (ic->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_AUDIO) {
+            as = ic->streams[i];
+            std::cout << "========Audio========" << std::endl;
+            std::cout << "sample_rate=" << as->codecpar->sample_rate << std::endl;
+            std::cout << "========Audio========" << std::endl;
+        }
+        //如果是视频
+        if (ic->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_VIDEO) {
+            vs = ic->streams[i];
+            std::cout << "========Video========" << std::endl;
+            std::cout << "width=" << vs->codecpar->width << std::endl;
+            std::cout << "height=" << vs->codecpar->height << std::endl;
+            std::cout << "========Video========" << std::endl;
+        }
+    }
 
+
+
+    auto video_codec_id = vs->codecpar->codec_id;	//视频编码器ID
+    auto video_par = vs->codecpar;					//视频编码参数
+    /* 视频解码器初始化 */
     MediaDecoder media_decoder;
-    auto c = media_decoder.CreateContext(codec_id, MediaCodec::DECODER);
-    media_decoder.SetContext(c);
-    media_decoder.InitHardWare();
-    media_decoder.OpenContext();
+    auto decode_c = MediaCodec::CreateContext(video_codec_id, MediaCodec::DECODER);
+    //解封装的视频编码参数传递给解码类
+    avcodec_parameters_to_context(decode_c, video_par);
+    //设置到解码器中, 保证线程安全, 设置完后decode_c不能在类外部使用
+    media_decoder.SetContext(decode_c);
+    if (media_decoder.OpenContext() == false) {
+        std::cout << "decode Open failed..." << std::endl;
+        return -1;
+    }
+    /* 创建解码输出的空间 */
+    auto frame = media_decoder.CreateAVFrame();
+    /* 渲染的初始化 */
+    auto view = MediaRender::CreateContext();
+    view->Init(video_par->width, video_par->height, (AVPixelFormat)video_par->format);
 
-    //分割上下文
-    auto parser = av_parser_init(codec_id);
-    auto pkt = av_packet_alloc();
-    auto frame = av_frame_alloc();
-    auto hw_frame = av_frame_alloc();//用于硬解码的转换
-    auto begin = GetCurrentMsTime();
-    int count = 0;//解码统计
-    bool is_init_win = false;
-    while (!ifs.eof()) {
-        //读到inbuf中
-        ifs.read((char*)inbuf, sizeof(inbuf));
-        int data_size = ifs.gcount();
-        if (data_size <= 0) {
-            break;
+    AVPacket pkt;
+    for (;;) {
+        ret = av_read_frame(ic, &pkt);
+        if (ret != 0) {
+            PrintError(ret);
+            return -1;
         }
-        //循环播放
-        if (ifs.eof()) {
-            ifs.clear();
-            ifs.seekg(0, std::ios::beg);
-        }
-        auto data = inbuf;
-        while (data_size > 0) {	//一次有多帧数据则循环调用 
-            //通过0001 截断, 输出到AVPacket
-            int ret = av_parser_parse2(parser, c,
-                &pkt->data, &pkt->size,		//输出
-                data, data_size,			//输入
-                AV_NOPTS_VALUE, AV_NOPTS_VALUE, 0
-            );
-            //从上一个位置继续进行处理
-            data += ret;
-            data_size -= ret;
-            if (pkt->size) {
-                //发送packet到解码线程
-                if (media_decoder.SendPacket(pkt) == false) {
-                    break;
-                }
-                //获取多帧解码数据
+        if (vs && pkt.stream_index == vs->index) {
+            std::cout << "Video: ";
+            //解码视频
+            if (media_decoder.SendPacket(&pkt)) {
                 while (media_decoder.RecvFrame(frame)) {
-                    /* 第一帧初始化窗口 */
-                    if (!is_init_win) {
-                        view->Init(frame->width, frame->height, (AVPixelFormat)frame->format);
-                        is_init_win = true;
-                    }
-                     view->PresentFrame(frame);
-                    ++count;
-                    auto cur = GetCurrentMsTime();
-                    if (cur - begin >= 100) {	//100ms计算1次
-                        std::cout << "fps=" << count * 10 << std::endl;
-                        count = 0;
-                        begin = cur;
-                    }
+                    std::cout << frame->pts << " " << std::endl;
+                    view->PresentFrame(frame);//渲染视频
                 }
             }
         }
+        if (as && pkt.stream_index == as->index) {
+            std::cout << "Audio: ";
+        }
+        std::cout << pkt.pts << ": " << pkt.dts << ": " << pkt.size << std::endl;
+        av_packet_unref(&pkt);//保证了内存可以及时释放
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
-    auto frames = media_decoder.GetCachePkt();
-    for (auto& frame : frames) {
-        view->PresentFrame(frame);
-        av_frame_free(&frame);
-    }
-    av_parser_close(parser);
-    avcodec_free_context(&c);
     av_frame_free(&frame);
-    av_packet_free(&pkt);
+    avformat_close_input(&ic);//与avformat_open_input成对使用
     return 0;
 }

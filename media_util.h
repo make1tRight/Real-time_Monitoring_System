@@ -3,9 +3,11 @@ extern "C" {
 #include <libavcodec/avcodec.h>
 #include <libavutil/opt.h>
 #include <libavutil/avutil.h>
+#include <libavformat/avformat.h>
 }
 #pragma comment(lib, "avcodec.lib")
 #pragma comment(lib, "avutil.lib")
+#pragma comment(lib, "avformat.lib")
 
 /// <summary>
 /// ´òÓ¡´íÎóÏûÏ¢

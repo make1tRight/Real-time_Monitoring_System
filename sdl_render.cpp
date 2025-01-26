@@ -11,13 +11,13 @@ bool SdlRender::Init(int width, int height, AVPixelFormat format)
 	_width = width;
 	_height = height;
 	_av_format = format;
-	if (_av_format == AV_PIX_FMT_YUV420P) {
-		_format = SDL_PIXELFORMAT_IYUV;
-	}
 	//AV_PIX_FMT_ARGB,      ///< packed ARGB 8:8:8:8, 32bpp, ARGBARGB...
 	//AV_PIX_FMT_RGBA,      ///< packed RGBA 8:8:8:8, 32bpp, RGBARGBA...
 	//AV_PIX_FMT_ABGR,      ///< packed ABGR 8:8:8:8, 32bpp, ABGRABGR...
 	//AV_PIX_FMT_BGRA,      ///< packed BGRA 8:8:8:8, 32bpp, BGRABGRA...
+	if (_av_format == AV_PIX_FMT_YUV420P) {
+		_format = SDL_PIXELFORMAT_IYUV;
+	}
 	if (_av_format == AV_PIX_FMT_RGBA) {
 		_format = SDL_PIXELFORMAT_RGBA32;
 	}
