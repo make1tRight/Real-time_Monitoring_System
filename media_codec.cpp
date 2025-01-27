@@ -2,10 +2,10 @@
 #include "media_util.h"
 #include <iostream>
 
-MediaCodec::MediaCodec(AVCodecContext* context)
-    : _context(context)
-{
-}
+//MediaCodec::MediaCodec(AVCodecContext* context)
+//    : _context(context)
+//{
+//}
 
 AVCodecContext* MediaCodec::CreateContext(int codec_id, CodecType codec_type)
 {

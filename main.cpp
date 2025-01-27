@@ -50,27 +50,65 @@ int main(int argc, char* argv[])
         }
     }
 
-
-
-    auto video_codec_id = vs->codecpar->codec_id;	//视频编码器ID
-    auto video_par = vs->codecpar;					//视频编码参数
-    /* 视频解码器初始化 */
-    MediaDecoder media_decoder;
-    auto decode_c = MediaCodec::CreateContext(video_codec_id, MediaCodec::DECODER);
-    //解封装的视频编码参数传递给解码类
-    avcodec_parameters_to_context(decode_c, video_par);
-    //设置到解码器中, 保证线程安全, 设置完后decode_c不能在类外部使用
-    media_decoder.SetContext(decode_c);
-    if (media_decoder.OpenContext() == false) {
-        std::cout << "decode Open failed..." << std::endl;
+    const char* out_url = "out_250126.mp4";
+    AVFormatContext* ec = nullptr;
+    ret = avformat_alloc_output_context2(&ec, NULL, NULL,
+        out_url);//根据文件名匹配封装格式
+    if (ret < 0) {
+        PrintError(ret);
         return -1;
     }
-    /* 创建解码输出的空间 */
-    auto frame = media_decoder.CreateAVFrame();
-    /* 渲染的初始化 */
-    auto view = MediaRender::CreateContext();
-    view->Init(video_par->width, video_par->height, (AVPixelFormat)video_par->format);
+    //添加视频流与音频流, mvs, mas会随着context的销毁而销毁
+    auto mvs = avformat_new_stream(ec, NULL);//视频流
+    auto mas = avformat_new_stream(ec, NULL);//音频流
+    ret = avio_open(&ec->pb, out_url, AVIO_FLAG_WRITE);
+    if (ret < 0) {
+        PrintError(ret);
+        return -1;
+    }
+    if (vs) {
+        mvs->time_base = vs->time_base;//与原视频的time_base一致
+        //从解封装中复制参数
+        avcodec_parameters_copy(mvs->codecpar, vs->codecpar);
+    }
+    if (as) {
+        mas->time_base = as->time_base;
+        avcodec_parameters_copy(mas->codecpar, as->codecpar);
+    }
+    //写入文件头
+    ret = avformat_write_header(ec, NULL);
+    if (ret < 0) {
+        PrintError(ret);
+        return -1;
+    }
+    //打印输出上下文
+    av_dump_format(ec, 0, out_url, 1);
 
+    double begin_sec = 10.0;//截取开始时间
+    double end_sec = begin_sec + 20.0;	//截取结束时间
+    long long begin_pts = 0;//视频开始时间
+    long long begin_audio_pts = 0;//音频开始时间
+    long long end_pts = 0;
+
+    //换算成pts, 换算成输入ic的pts, 以视频流为准
+    if (vs && vs->time_base.num > 0) {
+        double t = (double)vs->time_base.den / (double)vs->time_base.num;
+        begin_pts = (long long)(begin_sec * t);
+        end_pts = (long long)(end_sec * t);
+    }
+    if (as && as->time_base.num > 0) {
+        double t = (double)as->time_base.den / (double)as->time_base.num;
+        begin_audio_pts = (long long)(begin_sec * t);
+    }
+    //AVSEEK_FLAG_ANY
+    if (vs) {
+        ret = av_seek_frame(ic, vs->index,
+            begin_pts, AVSEEK_FLAG_ANY|AVSEEK_FLAG_BACKWARD);//向后或关键帧
+        if (ret < 0) {
+            PrintError(ret);
+            return -1;
+        }
+    }
     AVPacket pkt;
     for (;;) {
         ret = av_read_frame(ic, &pkt);
@@ -78,24 +116,59 @@ int main(int argc, char* argv[])
             PrintError(ret);
             return -1;
         }
+        AVStream* in_stream = ic->streams[pkt.stream_index];
+        AVStream* out_stream = nullptr;
+        long long offset_pts = 0;//偏移pts, 用于截断的开头pts运算
         if (vs && pkt.stream_index == vs->index) {
             std::cout << "Video: ";
             //解码视频
-            if (media_decoder.SendPacket(&pkt)) {
-                while (media_decoder.RecvFrame(frame)) {
-                    std::cout << frame->pts << " " << std::endl;
-                    view->PresentFrame(frame);//渲染视频
-                }
+            if (pkt.pts < begin_pts - 10) {
+                av_packet_unref(&pkt);
+                continue;
             }
+            if (pkt.pts > end_pts) {
+                av_packet_unref(&pkt);//保证了内存可以及时释放
+                break;
+            }
+            out_stream = ec->streams[0];
+            offset_pts = begin_pts;
         }
         if (as && pkt.stream_index == as->index) {
             std::cout << "Audio: ";
+            // 如果音频帧的时间戳超过视频的结束时间，丢弃该音频帧
+            if (pkt.pts < begin_pts - 10) {
+                av_packet_unref(&pkt);
+                continue;
+            }
+            out_stream = ec->streams[1];
+            offset_pts = begin_audio_pts;
         }
         std::cout << pkt.pts << ": " << pkt.dts << ": " << pkt.size << std::endl;
-        av_packet_unref(&pkt);//保证了内存可以及时释放
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        //重新计算pts, dts, duration
+        //写入音视频帧, 会清理pkt
+        //The operation is mathematically equivalent to `a* bq(输入timebase) / cq(输出timebase)`.
+        pkt.pts = av_rescale_q_rnd(pkt.pts - offset_pts, in_stream->time_base,
+            out_stream->time_base, (AVRounding)(AV_ROUND_NEAR_INF | AV_ROUND_PASS_MINMAX));
+        pkt.dts = av_rescale_q_rnd(pkt.dts - offset_pts, in_stream->time_base,
+            out_stream->time_base, (AVRounding)(AV_ROUND_NEAR_INF | AV_ROUND_PASS_MINMAX));
+        pkt.duration = av_rescale_q(pkt.duration, in_stream->time_base,
+            out_stream->time_base);
+        pkt.pos = -1;
+        ret = av_interleaved_write_frame(ec, &pkt);
+        if (ret != 0) {
+            PrintError(ret);
+            break;
+        }
+        av_packet_unref(&pkt);
     }
-    av_frame_free(&frame);
+    //写入结尾, 包含文件偏移索引
+    ret = av_write_trailer(ec);
+    if (ret != 0) {
+        PrintError(ret);
+        return -1;
+    }
     avformat_close_input(&ic);//与avformat_open_input成对使用
+    //avio_closep(&ec->pb);
+    avformat_free_context(ec);
     return 0;
 }

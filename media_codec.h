@@ -12,7 +12,7 @@ public:
 		ENCODER = 1
 	};
 
-	MediaCodec(AVCodecContext* context = nullptr);
+	//MediaCodec(AVCodecContext* context = nullptr);
 	/// <summary>
 	/// 创建编解码上下文
 	/// </summary>
