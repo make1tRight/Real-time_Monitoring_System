@@ -135,7 +135,10 @@
     <ClCompile Include="main.cpp" />
     <ClCompile Include="media_codec.cpp" />
     <ClCompile Include="media_decoder.cpp" />
+    <ClCompile Include="media_demux.cpp" />
     <ClCompile Include="media_encoder.cpp" />
+    <ClCompile Include="media_format.cpp" />
+    <ClCompile Include="media_mux.cpp" />
     <ClCompile Include="media_render.cpp" />
     <ClCompile Include="media_util.cpp" />
     <ClCompile Include="sdl_render.cpp" />
@@ -143,7 +146,10 @@
   <ItemGroup>
     <ClInclude Include="media_codec.h" />
     <ClInclude Include="media_decoder.h" />
+    <ClInclude Include="media_demux.h" />
     <ClInclude Include="media_encoder.h" />
+    <ClInclude Include="media_format.h" />
+    <ClInclude Include="media_mux.h" />
     <ClInclude Include="media_render.h" />
     <ClInclude Include="media_util.h" />
     <ClInclude Include="sdl_render.h" />
